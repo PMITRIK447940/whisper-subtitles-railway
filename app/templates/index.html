@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h2>Nahrajte video alebo audio súbor</h2>
+  <form action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
+    <input type="file" name="file" accept="video/*,audio/*" required>
+    <button type="submit">Vytvoriť titulky</button>
+  </form>
+  <p class="muted small">Max veľkosť: {{ max_upload_mb }} MB. Podporované všetko, čo prečíta FFmpeg.</p>
+</section>
+{% endblock %}
