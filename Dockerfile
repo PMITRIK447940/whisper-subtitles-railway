@@ -5,26 +5,30 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# OS deps: ffmpeg (includes ffprobe)
+# ffmpeg (obsahuje aj ffprobe)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \    && rm -rf /var/lib/apt/lists/*
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install Torch CPU wheels explicitly for reliability on Railway
-RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio
+# (A) Urob pip toolchain aktuálny – menej build problémov
+RUN python -m pip install --upgrade pip setuptools wheel
 
-# Python deps
+# (B) Torch CPU wheels z oficiálneho indexu (spoľahlivejšie)
+RUN python -m pip install --index-url https://download.pytorch.org/whl/cpu \
+    torch torchvision torchaudio
+
+# (C) Zvyšné Python závislosti z PyPI
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install -r requirements.txt
 
 # App
 COPY app ./app
 COPY railway.json ./railway.json
 
-# Default model can be overridden via env
 ENV WHISPER_MODEL=small
 ENV PORT=8080
-
 EXPOSE 8080
+
 CMD ["bash", "-lc", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
