@@ -38,13 +38,13 @@ def _split_srt_blocks(srt_text: str):
     for line in srt_text.splitlines():
         if line.strip() == "":
             if current:
-                blocks.append("\\n".join(current)); current = []
+                blocks.append("\n".join(current)); current = []
             continue
         current.append(line)
-    if current: blocks.append("\\n".join(current))
+    if current: blocks.append("\n".join(current))
     parsed = []
     for b in blocks:
-        parts = b.split("\\n", 2)
+        parts = b.split("\n", 2)
         if len(parts) == 3:
             parsed.append((parts[0], parts[1], parts[2]))
     return parsed
