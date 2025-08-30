@@ -15,10 +15,6 @@ async function pollProgress(jobId) {
       }
       bar.style.width = (data.progress || 0) + '%';
       label.textContent = data.message || '';
-      if (data.error) {
-        error.textContent = data.error;
-        error.classList.remove('hide');
-      }
       if (data.ready) {
         ready.classList.remove('hide');
         return; // stop polling
