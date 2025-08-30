@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Generátor titulkov (Whisper)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="container">
+    <h1>🎬 Generátor titulkov</h1>
+    <p class="muted">Whisper + FFmpeg + MarianMT</p>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="container small muted">
+    <p>FastAPI • Docker • Railway</p>
+  </footer>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
