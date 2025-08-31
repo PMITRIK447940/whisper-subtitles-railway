@@ -1,0 +1,120 @@
+*** a/app/translation.py
+--- b/app/translation.py
+@@
+ from pathlib import Path
+ from typing import List
+ 
+ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
+ 
+ AVAILABLE_LANGUAGES = [
+@@
+     ("ko", "한국어"),
+ ]
+ 
+- def _load_translator(model_name: str):
+-     tok = AutoTokenizer.from_pretrained(model_name)
+-     mdl = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+-     return pipeline("translation", model=mdl, tokenizer=tok)
+-
+-def _split_srt_blocks(srt_text: str):
++ # Simple in-process cache for translation pipelines
++ _PIPE_CACHE = {}
++
++ def _load_translator(model_name: str):
++     tok = AutoTokenizer.from_pretrained(model_name)
++     mdl = AutoModelForSeq2SeqLM.from_pretrained(model_name)
++     return pipeline("translation", model=mdl, tokenizer=tok)
++
++ def _get_pipe(model_name: str):
++     """Return a cached translation pipeline to avoid reloading models repeatedly."""
++     nlp = _PIPE_CACHE.get(model_name)
++     if nlp is None:
++         tok = AutoTokenizer.from_pretrained(model_name)
++         mdl = AutoModelForSeq2SeqLM.from_pretrained(model_name)
++         nlp = pipeline("translation", model=mdl, tokenizer=tok)
++         _PIPE_CACHE[model_name] = nlp
++     return nlp
++
++def _split_srt_blocks(srt_text: str):
+*** a/app/translation.py
+--- b/app/translation.py
+@@
+-def _translate_texts(texts: List[str], model_name: str) -> List[str]:
+-    nlp = _load_translator(model_name)
+-    outputs = []
+-    BATCH = 16
+-    for i in range(0, len(texts), BATCH):
+-        batch = texts[i:i+BATCH]
+-        results = nlp(batch, truncation=True, max_length=512)
+-        outputs.extend([r["translation_text"] for r in results])
+-    return outputs
++def _translate_texts(texts: List[str], model_name: str) -> List[str]:
++    # Reuse cached pipeline across requests
++    nlp = _get_pipe(model_name)
++    outputs = []
++    BATCH = 16
++    for i in range(0, len(texts), BATCH):
++        batch = texts[i:i+BATCH]
++        results = nlp(batch, truncation=True, max_length=512)
++        outputs.extend([r["translation_text"] for r in results])
++    return outputs
+*** a/app/workers.py
+--- b/app/workers.py
+@@
+-def _split_audio(video_path: str, out_dir: Path, segment_seconds: int) -> List[Path]:
+-    out_dir.mkdir(parents=True, exist_ok=True)
+-    pattern = str(out_dir / "chunk_%04d.wav")
+-    cmd = [
+-        "ffmpeg", "-y", "-i", video_path,
+-        "-ac", "1", "-ar", "16000",
+-        "-f", "segment", "-segment_time", str(segment_seconds),
+-        "-c:a", "pcm_s16le",
+-        pattern
+-    ]
+-    subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+-    return sorted(out_dir.glob("chunk_*.wav"))
++def _split_audio(video_path: str, out_dir: Path, segment_seconds: int) -> List[Path]:
++    out_dir.mkdir(parents=True, exist_ok=True)
++    pattern = str(out_dir / "chunk_%04d.wav")
++    # Faster & quieter: drop video/subs/data, hide banner/logs, avoid stdin blocking
++    cmd = [
++        "ffmpeg", "-y", "-nostdin", "-hide_banner", "-loglevel", "error",
++        "-i", video_path,
++        "-vn", "-sn", "-dn",          # ignore video, subtitle & data streams
++        "-ac", "1", "-ar", "16000",
++        "-f", "segment", "-segment_time", str(segment_seconds),
++        "-c:a", "pcm_s16le",
++        pattern,
++    ]
++    subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
++    return sorted(out_dir.glob("chunk_*.wav"))
+*** a/Dockerfile
+--- b/Dockerfile
+@@
+-FROM python:3.11-slim
+-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
++FROM python:3.11-slim
++ENV PYTHONDONTWRITEBYTECODE=1 \\
++    PYTHONUNBUFFERED=1 \\
++    PIP_NO_CACHE_DIR=1 \\
++    # Optional: keep caches in a predictable dir; mount a Volume here if chceš perzistenciu
++    TRANSFORMERS_CACHE=/tmp/hf \\
++    XDG_CACHE_HOME=/tmp/.cache
+*** a/Dockerfile
+--- b/Dockerfile
+@@
+ CMD ["bash","-lc","uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
++
++# --- Optional (commented) build-time prefetch to remove cold-start latency ---
++# This increases image size but first request is fast.
++# RUN python -c "import whisper, os; whisper.load_model(os.getenv('WHISPER_MODEL','small'))"
++# RUN python - <<'PY'
++# from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
++# models = [
++#   "Helsinki-NLP/opus-mt-en-sk","Helsinki-NLP/opus-mt-sk-en",
++#   "Helsinki-NLP/opus-mt-en-cs","Helsinki-NLP/opus-mt-cs-en",
++# ]
++# for m in models:
++#     AutoTokenizer.from_pretrained(m)
++#     AutoModelForSeq2SeqLM.from_pretrained(m)
++# PY
